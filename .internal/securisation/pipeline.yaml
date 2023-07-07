@@ -1,0 +1,69 @@
+image: maven:latest
+
+include:
+  - template: Security/Container-Scanning.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+
+services:
+  - docker:20.10.16-dind
+
+variables:
+  MAVEN_CLI_OPTS: "--batch-mode"
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  # Instruct Testcontainers to use the daemon of DinD.
+  DOCKER_HOST: "tcp://docker:2375"
+  # Instruct Docker not to start over TLS.
+  DOCKER_TLS_CERTDIR: ""
+  # Improve performance with overlayfs.
+  DOCKER_DRIVER: overlay2
+
+cache:
+  paths:
+    - .m2/repository/
+    - target/
+
+stages:
+  - package
+  - build
+  - test
+
+build:
+  stage: build
+  script:
+    - mvn $MAVEN_CLI_OPTS compile
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+test:
+  stage: test
+  script:
+    - mvn $MAVEN_CLI_OPTS test
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+container_scanning:
+  variables:
+    CS_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+  rules:
+    - if: $CI_COMMIT_TAG
+
+sast:
+  stage: test
+
+mvn:package:
+  stage: package
+  script:
+    - mvn $MAVEN_CLI_OPTS package
+  rules:
+    - if: $CI_COMMIT_TAG
+
+docker:package:
+  stage: package
+  image: docker:20.10.16
+  needs: ["mvn:package"]
+  script:
+    - docker build -f src/main/docker/Dockerfile.jvm -t ${DOCKER_ENV_CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG} .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push ${DOCKER_ENV_CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+  rules:
+    - if: $CI_COMMIT_TAG
