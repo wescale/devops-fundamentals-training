@@ -161,7 +161,7 @@ Vous devez faire un patch en urgence en créant une branche de hotfix:
 
 ```sh
 git switch main
-gco -b hotfix
+git checkout -b hotfix
 ```
 
 Editez feat-b.md pour supprimer le contenu: `But it still has a bug!!` puis faites un commit:
