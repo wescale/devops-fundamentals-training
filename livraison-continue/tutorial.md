@@ -53,7 +53,7 @@ Ajoutez un stage `package` avant les stages `build` et `test` qui va lancer deux
 * `mvn:package`: qui va lancer la commande `mvn package`
 * `docker:package`: qui va lancer la commande `docker build -f src/main/docker/Dockerfile.jvm -t quarkus/rest-heroes-jvm17 .`
   * Pour fonctionner, ce job a besoin d'utiliser une image `docker:20.10.16`et pas `maven:latest`.
-  * Un fichier <walkthrough-editor-open-file filePath="src/main/docker/Dockerfile.jvm">Dockerfile.jvm</walkthrough-editor-open-file> est fourni. Vous pouvez le consultez pour voir ce qui est fait. Ce fichier Dockerfile utilise une image de base OpenJDK-17 fournie par RedHat <https://catalog.redhat.com/software/containers/ubi9/openjdk-17/61ee7c26ed74b2ffb22b07f6?container-tabs=technical-information>.
+  * Un fichier [Dockerfile.jvm](https://github.com/wescale/quarkus-rest-heroes/blob/main/src/main/docker/Dockerfile.jvm) est fourni avec le code applicatif. Vous pouvez le consultez pour voir ce qui est fait. Ce fichier Dockerfile utilise une image de base OpenJDK-17 fournie par RedHat <https://catalog.redhat.com/software/containers/ubi9/openjdk-17/61ee7c26ed74b2ffb22b07f6?container-tabs=technical-information>.
 
 Le job `docker:package` a besoin du Jar construit par `mvn:package`. Cela se traduit par le mot-clé `needs` dans le fichier de pipeline. Pour rappel, la référence .gitlab-ci.yaml est [ici](https://docs.gitlab.com/ee/ci/yaml/).
 
@@ -74,9 +74,7 @@ Elle est visible sur `Deploy / Container registry`.
 Modifier le job `docker:package` pour que l'image ait le nom de votre registry et soit poussé sur la registry:
 
 ```sh
-# Attention remplacez XX par le nom de votre projet
 docker build docker build -f src/main/docker/Dockerfile.jvm -t ${CI_REGISTRY_IMAGE} .
-# Authentification pour envoi de l'image
 docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 docker push ${CI_REGISTRY_IMAGE}
 ```

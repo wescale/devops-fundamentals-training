@@ -1,0 +1,91 @@
+---
+- hosts: postgresql
+  become: yes
+
+  pre_tasks:
+    - name: Install packages
+      ansible.builtin.yum:
+        name:
+          - postgresql
+          - postgresql-server
+          - postgresql-contrib
+          - postgresql-libs
+          - postgresql-devel
+          - python3-devel
+          - "@Development tools"
+          #- python3-psycopg2
+        state: present
+
+    - name: Install psycopg2 python package
+      ansible.builtin.pip:
+        name: psycopg2
+        state: present
+
+  tasks:
+    - name: "Find out if PostgreSQL is initialized"
+      ansible.builtin.stat:
+        path: "/var/lib/pgsql/data/pg_hba.conf"
+      register: postgres_data
+
+    - name: "Initialize PostgreSQL"
+      shell: "postgresql-setup initdb"
+      when: not postgres_data.stat.exists
+ 
+    - name: "Start and enable services"
+      service: "name={{ item }} state=started enabled=yes"
+      with_items:
+        - postgresql
+    
+    - name: "Create app database"
+      postgresql_db:
+        state: present
+        name: "{{ POSTGRES_DB }}"
+      become: yes
+      become_user: postgres
+
+    - name: "Create db user"
+      postgresql_user:
+        state: present
+        name: "{{ POSTGRES_USER }}"
+        password: "{{ POSTGRES_PASSWORD }}"
+      become: yes
+      become_user: postgres
+
+    - name: "Grant db user access to app db"
+      postgresql_privs:
+        type: database
+        database: "{{ POSTGRES_DB }}"
+        roles: "{{ POSTGRES_USER }}"
+        grant_option: no
+        privs: all
+      become: yes
+      become_user: postgres
+
+    - name: "Allow md5 connection for the db user"
+      postgresql_pg_hba:
+        dest: "~/data/pg_hba.conf"
+        contype: host
+        databases: all
+        method: md5
+        users: "{{ POSTGRES_USER }}"
+        create: true
+      become: yes
+      become_user: postgres
+      notify: restart postgres
+
+    - name: "Template SQL init script"
+      ansible.builtin.template:
+        src: files/init.sql.j2
+        dest: /tmp/init.sql
+      register: sqlinit
+        
+    - name: "Initialize database"
+      ansible.builtin.shell:
+        become: true
+        become_user: postgres
+        args: psql {{ POSTGRES_DB }} < /tmp/init.sql
+      when: sqlinit.changed
+
+  handlers:
+    - name: restart postgres
+      service: name=postgresql state=restarted
