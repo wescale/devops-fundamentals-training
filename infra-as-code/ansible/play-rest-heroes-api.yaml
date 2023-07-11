@@ -3,14 +3,66 @@
   become: yes
 
   pre_tasks:
+    - name: Uninstall urllib3 2
+      ansible.builtin.pip:
+        name: urllib3
+        version: 2.0
+        state: absent
+
+    - name: Install urllib3 1
+      ansible.builtin.pip:
+        name: urllib3
+        version: 1.26
+        state: forcereinstall
+
+    - name: Install docker-py python package
+      ansible.builtin.pip:
+        name: docker-py
+        state: present
+
     - name: Install Docker Engine
       ansible.builtin.yum:
         name:
-          - # A completer
+          - docker
         state: present
 
-  tasks: 
+    - name: Add the user 'ec2-user' to docker
+      ansible.builtin.user:
+        name: 'ec2-user'
+        groups: docker
+
+  tasks:
     - name: "Start and enable services"
       service: "name={{ item }} state=started enabled=yes"
       with_items:
-        - # A completer
+        - docker
+
+    - name: Create a network
+      docker_network:
+        name: network_one
+
+    - name: "Docker login to private registry"
+      docker_login:
+        registry: "{{ REGISTRY_URL }}"
+        username: "{{ REGISTRY_USERNAME }}"
+        password: "{{ REGISTRY_PASSWORD }}"
+
+    # A compléter ...
+
+    
+    - name: Ensure the quarkus container is here
+      community.docker.docker_container:
+        name: rest-heroes-api
+        image: "{{ IMAGE }}"
+        state: started
+        ports:
+         - "8083:8083"
+        env:
+          QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://heroes-db:5432/{{ POSTGRES_DB }}
+          QUARKUS_HIBERNATE_ORM_DATABASE_GENERATION: validate
+          QUARKUS_DATASOURCE_USERNAME: "{{ POSTGRES_USER }}"
+          QUARKUS_DATASOURCE_PASSWORD: "{{ POSTGRES_PASSWORD }}"
+          QUARKUS_HIBERNATE_ORM_SQL_LOAD_SCRIPT: no-file
+          QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
+        networks:
+          - name: "network_one"

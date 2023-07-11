@@ -117,8 +117,8 @@ Créez celui de votre machine dans un nouveau fichier `security-group.tf`:
 ```tf
 data "aws_vpc" "main" {}
 
-resource "aws_security_group" "allow_ssh" {
-  name        = "${data.aws_caller_identity.current.user_id}-allow_ssh"
+resource "aws_security_group" "allow_ssh_http" {
+  name        = "${data.aws_caller_identity.current.user_id}-allow_ssh_http"
   description = "Allow SSH inbound traffic"
   vpc_id      = data.aws_vpc.main.id
 
@@ -126,6 +126,15 @@ resource "aws_security_group" "allow_ssh" {
     description      = "SSH from Internet"
     from_port        = 22
     to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  ingress {
+    description      = "TCP from Internet"
+    from_port        = 8083
+    to_port          = 8083
     protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
@@ -140,7 +149,7 @@ resource "aws_security_group" "allow_ssh" {
   }
 
   tags = {
-    Name = "allow_ssh"
+    Name = "allow_ssh_http"
   }
 }
 ```
@@ -176,7 +185,7 @@ resource "aws_instance" "server" {
 
   key_name = aws_key_pair.cloudshell.key_name
 
-  vpc_security_group_ids = [aws_security_group.allow_ssh.id]
+  vpc_security_group_ids = [aws_security_group.allow_ssh_http.id]
 }
 ```
 
@@ -206,6 +215,7 @@ ssh -i ~/.ssh/id_rsa ec2-user@PUBLIC_IP
 ```sh
 cd ../ansible
 python -m pip install --user ansible
+python -m pip install --user request
 ```
 
 Vérifiez qu'Ansible fonctionne: `ansible --version`
@@ -222,32 +232,78 @@ ansible --inventory=hosts.ini -m ping all
 
 ## Ansible - PostgreSQL
 
+Un playbook est fourni dans le dossier `ansible` pour installer, configurer et initialiser avec des données postgresql.
 
-## rest-heroes-api
+Exécutez ce playbook:
 
-play-?? avec task
+```sh
+ansible-playbook -i hosts.ini play-postgresql.yml -e @vars.yaml
+```
 
-- installation de Docker engine:
+## Ansible - rest-heroes-api init
 
+Vous allez créer un playbook Ansible pour provisionner la partie Java `rest-heroes-api`.
 
-yum update -y
-yum install docker -y
-usermod -a -G docker ec2-user
-systemctl enable docker.service
-systemctl start docker.service
+Partez du fichier `play-rest-heroes-api.yaml`.
 
+Pour récupérer l'image construite par le pipeline de ci/cd, docker engine doit s'authentifier sur la registry GitLab de votre projet. Le projet étant interne (non public), il en est de même pour les registries associées.
 
--> rest-heroes -> image ID ?
- -> creds Gitlab ?
-## Question
+Créez un token d'accès personnel sur gitlab: <https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html#create-a-personal-access-token> nommé `registry-iac`, avec les droits suivants:
 
-Usage de Terraform et Ansible tel quel -> packer
+* read (pull) access, read_registry.
 
-Instance solo -> pas bon.
-IP publique -> pas bon.
+Copiez-le et injectez le dans le fichier vars.yaml sous un nouvelle clé `REGISTRY_ACCESS_TOKEN: glpat-XXX`
 
-Terraform backend
+Dans le playbook, ajoutez deux `task` pour vous pouvoir accéder à la registry d'images puis démarrer le conteneur.
 
+```yaml
+# https://docs.ansible.com/ansible/2.9/modules/docker_login_module.html
+- name: Log into private registry and force re-authorization
+  docker_login:
+    registry: "{{ REGISTRY_URL }}"
+    username: "{{ REGISTRY_USERNAME }}"
+    password: "{{ REGISTRY_PASSWORD }}"
+
+# https://docs.ansible.com/ansible/latest/collections/community/docker/docker_container_module.html
+- name: Ensure the quarkus container is here
+  community.docker.docker_container:
+    name: rest-heroes-api
+    image: "{{ IMAGE }}"
+    state: started
+    ports:
+      - "8083:8083"
+    env:
+      QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://heroes-db:5432/{{ POSTGRES_DB }}
+      QUARKUS_HIBERNATE_ORM_DATABASE_GENERATION: validate
+      QUARKUS_DATASOURCE_USERNAME: "{{ POSTGRES_USER }}"
+      QUARKUS_DATASOURCE_PASSWORD: "{{ POSTGRES_PASSWORD }}"
+      QUARKUS_HIBERNATE_ORM_SQL_LOAD_SCRIPT: no-file
+      QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
+    networks:
+      - name: "network_one"
+```
+
+Ajouter les variables necessaires dans `vars.yaml`.
+
+Exécutez ce playbook:
+
+```sh
+ansible-playbook -i hosts.ini play-rest-heroes-api.yml -e @vars.yaml
+```
+
+Si tout est bon, vous devez pouvoir accéder au service http://PUBLIC_IP:8083/.
+
+## Nettoyage
+
+```sh
+terraform destroy
+```
+
+## Remarques
+
+* L'usage fait de Terraform pour créer une instance AWS unitaire n'est pas une bonne pratique.
+* L'usage de Terraform et Ansible tel que pensez ici n'est pas optimal. Construire une AMI serait plus efficace.
+* Terraform doit persister son état sur un `backend`
 
 ## Félicitations
 
