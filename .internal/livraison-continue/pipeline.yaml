@@ -47,7 +47,9 @@ mvn:package:
 docker:package:
   stage: package
   image: docker:20.10.16
-  needs: ["mvn:package"]
+  needs:
+    - job: mvn:package
+      artifacts: true
   script:
     - docker build -f src/main/docker/Dockerfile.jvm -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG} .
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
