@@ -215,7 +215,6 @@ ssh -i ~/.ssh/id_rsa ec2-user@PUBLIC_IP
 ```sh
 cd ../ansible
 python -m pip install --user ansible
-python -m pip install --user request
 ```
 
 Vérifiez qu'Ansible fonctionne: `ansible --version`
@@ -237,7 +236,7 @@ Un playbook est fourni dans le dossier `ansible` pour installer, configurer et i
 Exécutez ce playbook:
 
 ```sh
-ansible-playbook -i hosts.ini play-postgresql.yml -e @vars.yaml
+ansible-playbook -i hosts.ini play-postgresql.yaml -e @vars.yaml
 ```
 
 ## Ansible - rest-heroes-api init
@@ -252,7 +251,13 @@ Créez un token d'accès personnel sur gitlab: <https://docs.gitlab.com/ee/user/
 
 * read (pull) access, read_registry.
 
-Copiez-le et injectez le dans le fichier vars.yaml sous un nouvelle clé `REGISTRY_ACCESS_TOKEN: glpat-XXX`
+Indiquez à Ansible les variables `vars.yaml` suivantes:
+
+```yaml
+REGISTRY_PASSWORD: glpat-XXX
+REGISTRY_USERNAME: registry-iac
+REGISTRY_URL: gitlab.dev.aws.wescale.fr:5050
+```
 
 Dans le playbook, ajoutez deux `task` pour vous pouvoir accéder à la registry d'images puis démarrer le conteneur.
 
@@ -283,7 +288,7 @@ Dans le playbook, ajoutez deux `task` pour vous pouvoir accéder à la registry 
       - name: "network_one"
 ```
 
-Ajouter les variables necessaires dans `vars.yaml`.
+Ajouter la variable `IMAGE` dans `vars.yaml`. Il s'agit du chemin de l'image tel que donné par gitlab en cliquant sur `Deploy / Container registry / k8s-fund-trainee-X` puis image path à côté d'un tag.
 
 Exécutez ce playbook:
 
